@@ -1,0 +1,3 @@
+#copy the other file
+Expand-Archive -Path "$env:USERPROFILE\Downloads\dts-phase3.zip" -DestinationPath C:\dev\_tmp -Force
+Copy-Item -Recurse -Force C:\dev\_tmp\dts-phase2\* C:\dev\document-tracker\
