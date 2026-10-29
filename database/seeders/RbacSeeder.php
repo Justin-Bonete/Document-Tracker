@@ -16,9 +16,10 @@ class RbacSeeder extends Seeder
         $permissions = [
             'documents.view', 'documents.view_all', 'documents.view_confidential',
             'documents.create', 'documents.update', 'documents.void',
+            'documents.release', 'documents.close', 'documents.reopen',
             'files.upload', 'files.download',
-            'routes.create', 'routes.acknowledge', 'routes.complete',
-            'decisions.create',
+            'routes.create', 'routes.acknowledge', 'routes.complete', 'routes.receive_for_office',
+            'decisions.create', 'comments.create',
             'reports.view', 'audit.view',
             'users.manage', 'settings.manage',
         ];
@@ -28,10 +29,10 @@ class RbacSeeder extends Seeder
 
         $roles = [
             'system_admin'    => ['System Administrator', ['users.manage', 'settings.manage', 'reports.view']],
-            'records_officer' => ['Records Officer / Encoder', ['documents.view', 'documents.view_confidential', 'documents.create', 'documents.update', 'documents.void', 'files.upload', 'files.download', 'routes.create']],
-            'receiving_clerk' => ['Receiving Clerk', ['documents.view', 'routes.acknowledge']],
-            'office_head'     => ['Office Head / Approver', ['documents.view', 'documents.view_confidential', 'files.download', 'routes.create', 'routes.acknowledge', 'routes.complete', 'decisions.create', 'reports.view']],
-            'staff'           => ['Staff / Assignee', ['documents.view', 'files.download', 'routes.create', 'routes.acknowledge', 'routes.complete']],
+            'records_officer' => ['Records Officer / Encoder', ['documents.view', 'documents.view_confidential', 'documents.create', 'documents.update', 'documents.void', 'documents.release', 'documents.close', 'documents.reopen', 'files.upload', 'files.download', 'routes.create', 'comments.create']],
+            'receiving_clerk' => ['Receiving Clerk', ['documents.view', 'routes.acknowledge', 'routes.receive_for_office', 'comments.create']],
+            'office_head'     => ['Office Head / Approver', ['documents.view', 'documents.view_confidential', 'documents.reopen', 'files.download', 'routes.create', 'routes.acknowledge', 'routes.complete', 'routes.receive_for_office', 'decisions.create', 'comments.create', 'reports.view']],
+            'staff'           => ['Staff / Assignee', ['documents.view', 'files.download', 'routes.create', 'routes.acknowledge', 'routes.complete', 'comments.create']],
             'auditor'         => ['Auditor / Compliance', ['documents.view', 'documents.view_all', 'documents.view_confidential', 'reports.view', 'audit.view']],
             'viewer'          => ['Read-only Viewer', ['documents.view']],
         ];
@@ -42,7 +43,8 @@ class RbacSeeder extends Seeder
 
         $this->call(DocumentTypeSeeder::class);
 
-        $office = Office::firstOrCreate(['office_code' => 'MAIN'], ['name' => 'Main Office']);
+        $main  = Office::firstOrCreate(['office_code' => 'MAIN'], ['name' => 'Main Office']);
+        $admin = Office::firstOrCreate(['office_code' => 'ADMIN'], ['name' => 'Administration Office']);
 
         $pw = env('DTS_ADMIN_PASSWORD');
         if (! $pw) {
@@ -50,11 +52,13 @@ class RbacSeeder extends Seeder
             return;
         }
 
-        $this->makeUser(env('DTS_ADMIN_EMAIL', 'admin@example.com'), 'System Administrator', $pw, 'system_admin', $office);
+        $this->makeUser(env('DTS_ADMIN_EMAIL', 'admin@example.com'), 'System Administrator', $pw, 'system_admin', $main);
 
-        // Local development only: a records officer so you can test document registration.
+        // Local development only: one user per role so every workflow step can be tested.
         if (app()->environment('local')) {
-            $this->makeUser('records@example.com', 'Records Officer (dev)', $pw, 'records_officer', $office);
+            $this->makeUser('records@example.com', 'Records Officer (dev)', $pw, 'records_officer', $main);
+            $this->makeUser('head@example.com', 'Office Head (dev)', $pw, 'office_head', $admin);
+            $this->makeUser('staff@example.com', 'Staff (dev)', $pw, 'staff', $admin);
         }
     }
 

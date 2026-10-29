@@ -1,31 +1,35 @@
-# DTS Phase 2: Document Registry
+# DTS Phase 3: Routing, Custody & Workflow
 
-Adds: document types, server-generated tracking numbers (DTS-2026-0001042), register / list+search /
-detail / update / void, private file upload with SHA-256 + versioning, authorized download,
-per-document history, idempotent creation, and one central visibility rule (`Document::visibleTo`).
+Adds: routing (send / acknowledge / complete / return / forward / cancel), custody that moves on
+acknowledgement, decisions (approve / reject / return with reasons), release / close / reopen,
+comments, inbox / outbox, a custody timeline, and one WorkflowService that owns every status change.
+
+No new migrations: the tables were created in Phase 1.
 
 ## Install (from C:\dev\document-tracker)
-1. Copy this folder's contents over the project (app, config, database, routes). Say YES to replacing
-   `routes/api.php`, `AuditLog.php` and `RbacSeeder.php`. Phase 1 routes are included in the new file.
-2. `bootstrap/app.php`:
-   - in `withMiddleware`, add to the existing alias array:
-     `'idempotent' => \App\Http\Middleware\Idempotency::class,`
-   - replace the `withExceptions` closure body so it reads:
-     `->withExceptions(function (Exceptions $exceptions) { \App\Support\ApiExceptions::register($exceptions); })`
-3. Run:
+1. Copy this folder over the project (app, database, routes). Say YES to replacing `routes/api.php` and `RbacSeeder.php`.
+2. Seed the new permissions, office and dev users, then give all dev users one password:
    ```
-   php artisan migrate
    php artisan db:seed --class=RbacSeeder
-   php artisan serve
+   powershell -ExecutionPolicy Bypass -File .\set-dev-passwords.ps1
    ```
-   The seeder (env must be `local`, which is the default `.env`) creates `records@example.com`
-   with the same password as `DTS_ADMIN_PASSWORD`. The admin cannot register documents on purpose
-   (admins don't get content access by default).
-4. In a second PowerShell window: `powershell -ExecutionPolicy Bypass -File .\phase2-test.ps1`
+3. `php artisan serve` (leave running), then in a second window:
+   ```
+   powershell -ExecutionPolicy Bypass -File .\phase3-test.ps1
+   ```
 
-## Notes
-- Files live in `storage/app/private/documents/<doc id>/<uuid>`: not web-accessible.
-- Allowed uploads: pdf, docx, xlsx, png, jpg, jpeg, txt (max 20 MB, change in `.env` with DTS_UPLOAD_MAX_KB).
-  PHP's own `upload_max_filesize` / `post_max_size` in `C:\xampp\php\php.ini` must be at least as large.
-- Until Phase 4 adds a scanner, files stay `pending_scan` and download is allowed only while `DTS_MALWARE_SCAN=false`.
-- Out-of-scope documents return 404 (not 403) so IDs cannot be probed.
+## Workflow rules
+Document: registered -> routed -> in_review -> approved | rejected | returned -> released -> closed (reopen -> registered)
+Route:    sent -> acknowledged -> completed | returned,  or sent -> cancelled
+- One active route per document (sequential). Locks stop two people acting at once.
+- Custody moves to the receiver when they ACKNOWLEDGE; it goes back to the sender on a decision or return.
+- A named recipient acknowledges; an office-level route is claimed by whoever acknowledges it;
+  a receiving clerk (`routes.receive_for_office`) can acknowledge on someone's behalf (recorded in the event).
+- Only the assignee can complete / decide / return / forward.
+- Rejecting or returning requires a reason. Release needs `approved`; close needs `released` or `rejected`.
+
+## Endpoints
+POST /documents/{id}/routes, GET /documents/{id}/routes, GET /routes?box=inbox|outbox
+POST /routes/{id}/acknowledge | complete | return | forward | cancel
+POST /documents/{id}/decisions | release | close | reopen
+GET|POST /documents/{id}/comments
